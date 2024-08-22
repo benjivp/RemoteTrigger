@@ -1,10 +1,10 @@
 print('Importing necessary packages')
 
 from ultralytics import YOLO
-import cv2
-import time
+from cv2 import VideoCapture, imshow, waitKey, destroyAllWindows
+from time import time, sleep
 from numba import jit
-import rtmidi
+from rtmidi import MidiOut, MidiIn
 from rtmidi.midiconstants import NOTE_ON, NOTE_OFF
 from waiting import wait
 from pygrabber.dshow_graph import FilterGraph
@@ -24,7 +24,7 @@ if available_cameras:
         print('ok bye bye!')
         quit()
     else:
-        video = cv2.VideoCapture(int(user_input))
+        video = VideoCapture(int(user_input))
     print('Connection established')
 else:
     print('No available devices. Please ensure that a camera is connected.')
@@ -39,7 +39,7 @@ pose_det = YOLO('yolov8n-pose.pt')
 buffer_time = 0.18
 
 #Setting up necessary utilities (start time, iterator, empty array, video information, array to save to .csv)
-prev_time = time.time()
+prev_time = time()
 curr_time = 0
 frame_time = 0
 i = 1
@@ -54,7 +54,7 @@ condition = False
 
 def handle_input(event, data=None):
     global condition, rec_time
-    rec_time = time.time()
+    rec_time = time()
     message, deltatime = event
     if message[1] == 10:
         condition = True
@@ -62,8 +62,8 @@ def handle_input(event, data=None):
 print('Functions and variables prepared')
 print('Establishing connection with PD through MIDI')
 
-midiout = rtmidi.MidiOut()
-midiin = rtmidi.MidiIn()
+midiout = MidiOut()
+midiin = MidiIn()
 available_ports_out = midiout.get_ports()
 available_ports_in = midiin.get_ports()
 
@@ -95,19 +95,19 @@ else:
     quit()
 
 print('Testing latency through MIDI')
-lat_time = time.time()
+lat_time = time()
 midiout.send_message([NOTE_ON, 0, 127])
 print('Waiting for MIDI response')
 wait(lambda: condition, timeout_seconds=5, waiting_for='MIDI response')
 rndtrip_time = rec_time - lat_time
 print(f'Roundtrip latency for MIDI message: {rndtrip_time} s.')
-time.sleep(3)
+sleep(3)
 print('Closing MIDI input port')
 midiin.close_port()
 del midiin
 
 print('Beginning movement identification. To terminate, press \'q\' on the live video window.')
-time.sleep(3)
+sleep(3)
 #Loop to run frame-by-frame analysis on video source
 #If livecam use True, if video file use video.isOpened()
 while (True):
@@ -117,7 +117,7 @@ while (True):
         #Using counter i to skip two frames to save on computation
         if (i % 3) == 0:
             #Displaying the current frame
-            cv2.imshow('Webcam', frame)
+            imshow('Webcam', frame)
             #Run inference on current frame
             #Parameter explanation:
                 #Soure: What is being infered on, in this case it is the current frame defined above
@@ -127,13 +127,13 @@ while (True):
                 #Save: Toggle for saving the annoted frame to memory (Currenlty names each frame the same, so only the last frame is saved when live due to overwrites)
                 #Stream: Changes the output format from a list to a generator
             results = pose_det(source=frame, show=False, conf=0.55, max_det=1, save=False, stream=False)
-            curr_time = time.time()
+            curr_time = time()
             frame_time = curr_time - prev_time
 
             if i > 3:
                 #Setting frame time to buffer time to allow for more consistent processing and analysis, especially for the neural network step
                 if frame_time < buffer_time:
-                    time.sleep(buffer_time - frame_time)
+                    sleep(buffer_time - frame_time)
                     frame_time = buffer_time
 
                 keypoints = (results[0].keypoints).xy[0].numpy()
@@ -175,14 +175,14 @@ while (True):
                     print('Cannot identify')
                 print('Frame Time: ' + str(frame_time))
                 i = i + 1
-                prev_time = time.time()
+                prev_time = time()
             else:
                 i = i + 1
         else:
             i = i + 1
 
         #Set hotkey to stop the video stream when "show" is set to True (q in this case)
-        if cv2.waitKey(1) == ord('q'):
+        if waitKey(1) == ord('q'):
             break
     else:
         break
@@ -190,7 +190,7 @@ while (True):
 #Closing video connection and associated windows
 print('Closing video feed')
 video.release()
-cv2.destroyAllWindows
+destroyAllWindows
 print('Closing MIDI port connection')
 midiout.close_port()
 del midiout
