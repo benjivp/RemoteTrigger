@@ -1,0 +1,17 @@
+#N canvas -4427 -2068 3840 1935 12;
+#X obj 9 62 notefilter;
+#A saved 60 0;
+#X obj 9 169 ccout;
+#A saved 127 1 1;
+#X obj 9 589 rec-send;
+#A saved 10 127 0 0;
+#X obj 9 433 ccout;
+#A saved 64 1 1;
+#X obj 9 326 notefilter;
+#A saved 61 0;
+#X text 200 90 Right hand set to 60;
+#X text 200 354 Left hand set to 61;
+#X text 200 614 Latency test set to trigger on 0;
+#X text 200 681 Latency test set (in RemoteTrigger_hand.py) to respond to 10;
+#X connect 0 0 1 0;
+#X connect 4 0 3 0;

@@ -3,7 +3,6 @@ print('Importing necessary packages')
 from ultralytics import YOLO
 from cv2 import VideoCapture, imshow, waitKey, destroyAllWindows
 from time import time, sleep
-from numba import jit
 from rtmidi import MidiOut, MidiIn
 from rtmidi.midiconstants import NOTE_ON, NOTE_OFF
 from waiting import wait
@@ -12,11 +11,15 @@ from pygrabber.dshow_graph import FilterGraph
 print('Packages imported')
 
 print('Generating camera device list')
+#Retrieving all connected devices
 devices = FilterGraph().get_input_devices()
+#Initializing empty list
 available_cameras = {}
+#Creating list of available devices
 for device_index, device_name in enumerate(devices):
     available_cameras[device_index] = device_name
 
+#Prompting user to select the connected camera to use in movement identification
 if available_cameras:
     print('Found device(s): ', available_cameras)
     user_input = input('Enter device number or \'q\' to quit: ')
@@ -38,35 +41,37 @@ pose_det = YOLO('yolov8n-pose.pt')
 #Buffer time (aka minimum time) allows for consistency in data points, regardless of performance
 buffer_time = 0.18
 
-#Setting up necessary utilities (start time, iterator, empty array, video information, array to save to .csv)
-prev_time = time()
-curr_time = 0
-frame_time = 0
-i = 1
-ret, frame = video.read()
-height, width, channels = frame.shape
-cooldown_R = False
-cooldown_L = False
-r = 0
-l = 0
-tester = True
-condition = False
+#Setting up necessary utilities
+prev_time = time() #For implementing buffer
+curr_time = 0 #For implementing buffer
+frame_time = 0 #For implementing buffer
+i = 1 #For counting frames
+cooldown_R = False #For right hand cooldown period
+cooldown_L = False #For left hand cooldown period
+r = 0 #For counting frames during right hand cooldown period
+l = 0 #For counting frames during left hand cooldown period
+tester = True #For latency test
+resp_received = False #For latency test
 
+#Functions for handling MIDI input from PD during latency test
 def handle_input(event, data=None):
-    global condition, rec_time
+    global resp_received, rec_time
     rec_time = time()
     message, deltatime = event
     if message[1] == 10:
-        condition = True
+        resp_received = True
 
 print('Functions and variables prepared')
+
 print('Establishing connection with PD through MIDI')
 
+#Retrieving list of MIDI ports for configuration
 midiout = MidiOut()
 midiin = MidiIn()
 available_ports_out = midiout.get_ports()
 available_ports_in = midiin.get_ports()
 
+#Prompting user to select output MIDI port
 if available_ports_out:
     print('OUTPUT - Found ports: ', available_ports_out)
     user_input = input('Enter port number or \'q\' to quit: ')
@@ -80,6 +85,7 @@ else:
     print('No available ports. Please ensure that a virtual MIDI port is available')
     quit()
 
+#Prompting user to select input MIDI port (for latency test)
 if available_ports_in:
     print('INPUT - Found ports: ', available_ports_in)
     user_input = input('Enter port number or \'q\' to quit: ')
@@ -94,27 +100,29 @@ else:
     print('No available ports. Please ensure that a virtual MIDI port is available')
     quit()
 
+#Testing roundtrip latency of MIDI signal
 print('Testing latency through MIDI')
 lat_time = time()
 midiout.send_message([NOTE_ON, 0, 127])
 print('Waiting for MIDI response')
-wait(lambda: condition, timeout_seconds=5, waiting_for='MIDI response')
+wait(lambda: resp_received, timeout_seconds=5, waiting_for='MIDI response')
 rndtrip_time = rec_time - lat_time
 print(f'Roundtrip latency for MIDI message: {rndtrip_time} s.')
-sleep(3)
+sleep(3) #To allow user time to read latency test result
 print('Closing MIDI input port')
+#Closing input MIDI port, no longer necessary for general usage
 midiin.close_port()
 del midiin
 
 print('Beginning movement identification. To terminate, press \'q\' on the live video window.')
-sleep(3)
+sleep(3) #To allow user time to read how to quit the program
 #Loop to run frame-by-frame analysis on video source
 #If livecam use True, if video file use video.isOpened()
-while (True):
+while (True): #Only end at break point when live camera is closed
     #Isolating video frame
     ret, frame = video.read()
     if ret:
-        #Using counter i to skip two frames to save on computation
+        #Using counter i to skip frames to save on computation
         if (i % 3) == 0:
             #Displaying the current frame
             imshow('Webcam', frame)
@@ -131,12 +139,14 @@ while (True):
             frame_time = curr_time - prev_time
 
             if i > 3:
-                #Setting frame time to buffer time to allow for more consistent processing and analysis, especially for the neural network step
+                #Setting frame time to buffer time to allow for more consistent processing and analysis
                 if frame_time < buffer_time:
                     sleep(buffer_time - frame_time)
                     frame_time = buffer_time
 
-                keypoints = (results[0].keypoints).xy[0].numpy()
+                keypoints = (results[0].keypoints).xy[0].numpy() #Retrieving keypoints from YOLOv8 pose detection output
+
+                #Incrementing cooldown frames for each hand
                 if cooldown_R:
                     if r < 5:
                         print('R cooldown...')
@@ -149,32 +159,31 @@ while (True):
                         l = l + 1
                     else:
                         cooldown_L = False
+
                 if keypoints.size != 0:
-                    if (keypoints[5][1] != 0 or keypoints[6][1] != 0) and (keypoints[9][1] != 0 or keypoints[10][1] != 0):
-                        if cooldown_R == False:
+                    if (keypoints[3][1] != 0 or keypoints[4][1] != 0) and (keypoints[5][1] != 0 or keypoints[6][1] != 0) and (keypoints[9][1] != 0 or keypoints[10][1] != 0): #Ensuring at least one of each ear, shoulder and hand is visible 
+                        if cooldown_R == False: #No analysis necessary if in cooldown
                             if keypoints[10][1] != 0:
-                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[10][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])):
+                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[10][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])): #Trigger when distance between hand and ear > distance between ear and shoulder
                                     print('right hand up!')
-                                    midiout.send_message([NOTE_ON, 60, 64])
-                                    midiout.send_message([NOTE_OFF, 60, 0])
-                                    print('sent midi 60')
-                                    cooldown_R = True
-                                    r = 0
-                        if cooldown_L == False:
+                                    midiout.send_message([NOTE_ON, 60, 64]) #send MIDI note 60 on to PD
+                                    midiout.send_message([NOTE_OFF, 60, 0]) #send MIDI note 60 off to PD
+                                    cooldown_R = True #Trigger cooldown period
+                                    r = 0 #Set cooldown frames to 0
+                        if cooldown_L == False: #No analysis necessary if in cooldown
                             if keypoints[9][1] != 0:
-                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[9][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])):
+                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[9][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])): #Trigger when distance between hand and ear > distance between ear and shoulder
                                     print('left hand up!')
-                                    midiout.send_message([NOTE_ON, 61, 64])
-                                    midiout.send_message([NOTE_OFF, 61, 0])
-                                    print('sent midi 61')
-                                    cooldown_L = True
-                                    l = 0
+                                    midiout.send_message([NOTE_ON, 61, 64]) #send MIDI note 61 on to PD
+                                    midiout.send_message([NOTE_OFF, 61, 0]) #send MIDI note 61 off to PD
+                                    cooldown_L = True #Trigger cooldown period
+                                    l = 0 #Set cooldown frames to 0
                     else:
                         print('Cannot identify')
                 else:
                     print('Cannot identify')
-                print('Frame Time: ' + str(frame_time))
-                i = i + 1
+                print(f'Frame Time: {frame_time} s')
+                i = i + 1 #Increment frame number
                 prev_time = time()
             else:
                 i = i + 1
