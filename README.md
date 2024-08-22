@@ -7,6 +7,7 @@ MIDI PORTS:
 3. When prompted to (when running the program), select this virtual MIDI port for I/O
 
 REAPER:
+(Setup example - zzz_example-reaper.rpp & PD/zzz_example-reaper.pd)
 1. Go to "Options->Preferences...->Audio->MIDI Devices"
 2. In "MIDI inputs," ensure the virtual MIDI port appears in the Device list and that it is toggled on for "Input"
 3. In "MIDI outputs," ensure the virtual MIDI port appears in the Device list and that it is toggled on for "Enable"
