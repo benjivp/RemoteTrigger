@@ -1,0 +1,6 @@
+numba>=0.59.1
+opencv-python>=4.9.0.80
+pygrabber>=0.2
+python-rtmidi>=1.5.8
+ultralytics>=8.2.6
+waiting>=1.4.1
