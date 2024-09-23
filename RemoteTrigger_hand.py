@@ -58,9 +58,7 @@ def handle_input(event, data=None):
     global resp_received, rec_time
     rec_time = time()
     message, deltatime = event
-    if message[1] == 10:
-        resp_received = True
-
+    resp_received = True
 print('Functions and variables prepared')
 
 print('Establishing connection with PD through MIDI')
