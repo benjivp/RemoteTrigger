@@ -48,10 +48,12 @@ frame_time = 0 #For implementing buffer
 i = 1 #For counting frames
 cooldown_R = False #For right hand cooldown period
 cooldown_L = False #For left hand cooldown period
+cooldown_time = 3 #For number of frames in cooldown period
 r = 0 #For counting frames during right hand cooldown period
 l = 0 #For counting frames during left hand cooldown period
 tester = True #For latency test
 resp_received = False #For latency test
+
 
 #Functions for handling MIDI input from PD during latency test
 def handle_input(event, data=None):
@@ -107,6 +109,7 @@ wait(lambda: resp_received, timeout_seconds=5, waiting_for='MIDI response')
 rndtrip_time = rec_time - lat_time
 print(f'Roundtrip latency for MIDI message: {rndtrip_time} s.')
 sleep(3) #To allow user time to read latency test result
+midiout.send_message([NOTE_OFF, 0, 127])
 print('Closing MIDI input port')
 #Closing input MIDI port, no longer necessary for general usage
 midiin.close_port()
@@ -146,31 +149,52 @@ while (True): #Only end at break point when live camera is closed
 
                 #Incrementing cooldown frames for each hand
                 if cooldown_R:
-                    if r < 5:
+                    if r < cooldown_time:
                         print('R cooldown...')
                         r = r + 1
                     else:
                         cooldown_R = False
                 if cooldown_L:
-                    if l < 5:
+                    if l < cooldown_time:
                         print('L cooldown...')
                         l = l + 1
                     else:
                         cooldown_L = False
 
                 if keypoints.size != 0:
-                    if (keypoints[3][1] != 0 or keypoints[4][1] != 0) and (keypoints[5][1] != 0 or keypoints[6][1] != 0) and (keypoints[9][1] != 0 or keypoints[10][1] != 0): #Ensuring at least one of each ear, shoulder and hand is visible 
+                    #Naming all necessary keypoints
+                    #nose_y = keypoints[0][1]
+                    #left_eye_y = keypoints[1][1]
+                    #r_eye_y = keypoints[2][1]
+                    l_ear_y = keypoints[3][1]
+                    r_eye_y = keypoints[4][1]
+                    l_shoulder_y = keypoints[5][1]
+                    r_shoulder_y = keypoints[6][1]
+                    #l_elbow_y = keypoints[7][1]
+                    #r_elbow_y = keypoints[8][1]
+                    l_hand_y = keypoints[9][1]
+                    r_hand_y = keypoints[10][1]
+                    #l_hip_y = keypoints[11][1]
+                    #r_hip_y = keypoints[12][1]
+                    #l_knee_y = keypoints[13][1]
+                    #r_knee_y = keypoints[14][1]
+                    #l_foot_y = keypoints[15][1]
+                    #r_foot_y = keypoints[16][1]
+
+                    if (l_ear_y != 0 or r_eye_y != 0) and (l_shoulder_y != 0 or r_shoulder_y != 0) and (l_hand_y != 0 or r_hand_y != 0): #Ensuring at least one of each ear, shoulder and hand is visible 
                         if cooldown_R == False: #No analysis necessary if in cooldown
-                            if keypoints[10][1] != 0:
-                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[10][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])): #Trigger when distance between hand and ear > distance between ear and shoulder
+                            if r_hand_y != 0:
+                                if (max(l_ear_y, r_eye_y) - r_hand_y) >= (max(l_shoulder_y, r_shoulder_y) - max(l_ear_y, r_eye_y)): #Trigger when distance between hand and ear > distance between ear and shoulder
                                     print('right hand up!')
                                     midiout.send_message([NOTE_ON, 60, 64]) #send MIDI note 60 on to PD
+                                    midiout.send_message([NOTE_ON, 64, 64])
                                     midiout.send_message([NOTE_OFF, 60, 0]) #send MIDI note 60 off to PD
+                                    midiout.send_message([NOTE_OFF, 64, 0])
                                     cooldown_R = True #Trigger cooldown period
                                     r = 0 #Set cooldown frames to 0
                         if cooldown_L == False: #No analysis necessary if in cooldown
-                            if keypoints[9][1] != 0:
-                                if (max(keypoints[3][1], keypoints[4][1]) - keypoints[9][1]) >= (max(keypoints[5][1], keypoints[6][1]) - max(keypoints[3][1], keypoints[4][1])): #Trigger when distance between hand and ear > distance between ear and shoulder
+                            if l_hand_y != 0:
+                                if (max(l_ear_y, r_eye_y) - l_hand_y) >= (max(l_shoulder_y, r_shoulder_y) - max(l_ear_y, r_eye_y)): #Trigger when distance between hand and ear > distance between ear and shoulder
                                     print('left hand up!')
                                     midiout.send_message([NOTE_ON, 61, 64]) #send MIDI note 61 on to PD
                                     midiout.send_message([NOTE_OFF, 61, 0]) #send MIDI note 61 off to PD
